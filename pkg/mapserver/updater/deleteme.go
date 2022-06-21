@@ -8,6 +8,7 @@ import (
 	"github.com/google/certificate-transparency-go/x509"
 	ctx509 "github.com/google/certificate-transparency-go/x509"
 	"github.com/netsec-ethz/fpki/pkg/db"
+	"github.com/netsec-ethz/fpki/pkg/mapserver/common"
 )
 
 // functions for measuring the bottlemeck
@@ -17,6 +18,12 @@ func (u *MapUpdater) UpdateNextBatchReturnTimeList(ctx context.Context) (int, []
 	if err != nil {
 		return 0, nil, fmt.Errorf("CollectCerts | GetCertMultiThread | %w", err)
 	}
+	certSize := 0.0
+	for _, cert := range certs {
+		certSize = certSize + float64(len(cert.Raw))
+	}
+
+	fmt.Println("certs size: ", certSize/1024/1024, " MB")
 	timeList, err := u.updateCertsReturnTime(ctx, certs)
 	return len(certs), timeList, err
 }
@@ -39,22 +46,10 @@ func (mapUpdater *MapUpdater) updateCertsReturnTime(ctx context.Context, certs [
 		return nil, nil
 	}
 
-	keyInput, valueInput, err := keyValuePairToSMTInput(keyValuePairs)
+	_, _, err = keyValuePairToSMTInput(keyValuePairs)
 	if err != nil {
 		return nil, fmt.Errorf("CollectCerts | keyValuePairToSMTInput | %w", err)
 	}
-
-	start = time.Now()
-	_, err = mapUpdater.smt.Update(ctx, keyInput, valueInput)
-	if err != nil {
-		return nil, fmt.Errorf("CollectCerts | Update | %w", err)
-	}
-	end = time.Now()
-
-	fmt.Println()
-	fmt.Println("============================================")
-	fmt.Println("(memory) time to update tree in memory: ", end.Sub(start))
-	timeList = append(timeList, end.Sub(start).String())
 
 	totalEnd := time.Now()
 
@@ -92,8 +87,15 @@ func (mapUpdater *MapUpdater) UpdateDomainEntriesTableUsingCertsReturnTime(ctx c
 		return nil, 0, nil, fmt.Errorf("UpdateDomainEntriesTableUsingCerts | retrieveAffectedDomainFromDB | %w", err)
 	}
 	end = time.Now()
-	fmt.Println("(db)     time to retrieve domain entries: ", end.Sub(start))
+
 	timeList = append(timeList, end.Sub(start).String())
+	fmt.Println("(db)     time to retrieve domain entries: ", end.Sub(start))
+
+	//readSize := 0.0
+	//for _, v := range domainEntriesMap {
+	//	readSize = readSize + float64(countDomainEntriesSize(v))
+	//}
+	//fmt.Println("(db)     time to retrieve domain entries: ", end.Sub(start), "                ", readSize/1024/1024, " MB")
 
 	start = time.Now()
 	// update the domain entries
@@ -116,6 +118,11 @@ func (mapUpdater *MapUpdater) UpdateDomainEntriesTableUsingCertsReturnTime(ctx c
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("UpdateDomainEntriesTableUsingCerts | getDomainEntriesToWrite | %w", err)
 	}
+	//readSize = 0.0
+	//for _, v := range domainEntriesToWrite {
+	//	readSize = readSize + float64(countDomainEntriesSize(v))
+	//}
+	//fmt.Println(" domain entries size:                                                          ", readSize/1024/1024, " MB")
 
 	// serialized the domainEntry -> key-value pair
 	keyValuePairs, err := serializeUpdatedDomainEntries(domainEntriesToWrite)
@@ -145,4 +152,16 @@ func (mapUpdater *MapUpdater) UpdateDomainEntriesTableUsingCertsReturnTime(ctx c
 	timeList = append(timeList, end.Sub(start).String())
 
 	return keyValuePairs, num, timeList, nil
+}
+
+func countDomainEntriesSize(entry *common.DomainEntry) int {
+	totalSize := len(entry.DomainName)
+
+	for _, ca := range entry.CAEntry {
+		totalSize = totalSize + len(ca.CAName) + len(ca.CAHash)
+		for _, cert := range ca.DomainCerts {
+			totalSize = totalSize + len(cert)
+		}
+	}
+	return totalSize
 }
