@@ -147,6 +147,7 @@ func getCertificates(ctURL string, startIndex, endIndex, numOfWorker int, stopCh
 }
 
 // getCerts gets certificates from CT log. It will request all certs in [start,end] (including both)
+// with as many HTTP requests as necessary.
 func getCerts(ctURL string, start, end int, stopChan chan struct{}) ([]*ctx509.Certificate, error) {
 	allCerts := make([]*ctx509.Certificate, 0, end-start+1)
 	for end >= start {
@@ -160,19 +161,22 @@ func getCerts(ctURL string, start, end int, stopChan chan struct{}) ([]*ctx509.C
 			return nil, nil
 		default:
 		}
-		newCerts, err := parseCertificatesFromCTLogServerResponse(resp)
+		newCerts, parsedCerts, err := parseCertificatesFromCTLogServerResponse(resp)
 		if err != nil {
 			return nil, err
 		}
-		start += len(newCerts)
+		start += parsedCerts
 		allCerts = append(allCerts, newCerts...)
 	}
 	return allCerts, nil
 }
 
 // parseCertificatesFromCTLogServerResponse iteratively gets all requested certificates,
-// with as many HTTP requests as necessary.
-func parseCertificatesFromCTLogServerResponse(resp *http.Response) ([]*ctx509.Certificate, error) {
+// checks those that are of type X509LogEntryType and then parses them and returns them.
+// It also returns how many total entries it has seen in the response, irrespective of their type.
+func parseCertificatesFromCTLogServerResponse(resp *http.Response,
+) ([]*ctx509.Certificate, int, error) {
+
 	type CertLog struct {
 		Entries []struct {
 			LeafInput string `json:"leaf_input"`
@@ -184,44 +188,30 @@ func parseCertificatesFromCTLogServerResponse(resp *http.Response) ([]*ctx509.Ce
 	var ctCerts CertLog
 	err := json.Unmarshal(buf.Bytes(), &ctCerts)
 	if err != nil {
-		return nil, fmt.Errorf("getCerts | json unmarshal %w\n%s", err, buf.String())
+		return nil, 0, fmt.Errorf("getCerts | json unmarshal %w\n%s", err, buf.String())
 	}
 
-	certs := make([]*ctx509.Certificate, len(ctCerts.Entries))
-	// parse merkle leaves and append them to the result
-	for i, entry := range ctCerts.Entries {
+	certs := make([]*ctx509.Certificate, 0, len(ctCerts.Entries))
+	// parse Merkle leaves and append them to the result
+	for _, entry := range ctCerts.Entries {
 		leafBytes, _ := base64.RawStdEncoding.DecodeString(entry.LeafInput)
 		var merkleLeaf ct.MerkleTreeLeaf
 		ctTls.Unmarshal(leafBytes, &merkleLeaf)
 
-		var certificate *ctx509.Certificate
-		switch entryType := merkleLeaf.TimestampedEntry.EntryType; entryType {
-		case ct.X509LogEntryType:
-			certificate, err = ctx509.ParseCertificate(merkleLeaf.TimestampedEntry.X509Entry.Data)
+		if merkleLeaf.TimestampedEntry.EntryType == ct.X509LogEntryType {
+			certificate, err := ctx509.ParseCertificate(merkleLeaf.TimestampedEntry.X509Entry.Data)
 			if err != nil {
 				switch err.(type) {
 				case ctx509.NonFatalErrors:
 					fmt.Println(err.Error())
 				default:
-					return nil, fmt.Errorf("getCerts | ParseCertificate %w", err)
+					return nil, 0, fmt.Errorf("getCerts | ParseCertificate %w", err)
 				}
 			}
-		case ct.PrecertLogEntryType:
-			certificate, err = ctx509.ParseTBSCertificate(merkleLeaf.TimestampedEntry.PrecertEntry.TBSCertificate)
-			if err != nil {
-				switch err.(type) {
-				case ctx509.NonFatalErrors:
-					fmt.Println(err.Error())
-				default:
-					return nil, fmt.Errorf("getCerts | ParseTBSCertificate %w", err)
-				}
-			}
-		default:
-			return nil, fmt.Errorf("getCerts | CT type unknown %v", entryType)
+			certs = append(certs, certificate)
 		}
-		certs[i] = certificate
 	}
-	return certs, nil
+	return certs, len(ctCerts.Entries), nil
 }
 
 // GetPCAndRPC: get PC and RPC from url

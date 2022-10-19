@@ -19,7 +19,8 @@ func TestGetCerts(t *testing.T) {
 	count := 100
 	certs, err := getCerts(ctURL, start, start+count-1, stopChan)
 	require.NoError(t, err)
-	require.Len(t, certs, 100, "got %d", len(certs))
+	require.Len(t, certs, 24, "got %d", len(certs))
+	testCertsHaveSignature(t, certs)
 }
 
 func TestDownloadCertSize(t *testing.T) {
@@ -61,8 +62,9 @@ func TestDownloadCertSize(t *testing.T) {
 			stopChan := make(chan struct{})
 			certs, err := getCertificates(ctURL, tc.start, tc.end, tc.numWorkers, stopChan)
 			require.NoError(t, err)
-			require.Len(t, certs, tc.end-tc.start+1,
+			require.LessOrEqual(t, len(certs), tc.end-tc.start+1,
 				"got %d instead of %d", len(certs), tc.end-tc.start+1)
+			testCertsHaveSignature(t, certs)
 		})
 	}
 }
@@ -139,8 +141,9 @@ func TestLogFetcher(t *testing.T) {
 				}
 			}
 
-			require.Len(t, allCerts, tc.end-tc.start+1,
+			require.LessOrEqual(t, len(allCerts), tc.end-tc.start+1,
 				"got %d instead of %d", len(allCerts), tc.end-tc.start+1)
+			testCertsHaveSignature(t, allCerts)
 			certs, err := f.NextBatch(ctx)
 			require.NoError(t, err)
 			require.Nil(t, certs)
@@ -162,4 +165,12 @@ func TestTimeoutLogFetcher(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Len(t, certs, 0)
+}
+
+// testCertsHaveSignature checks that all certs have a non empty signature.
+func testCertsHaveSignature(t *testing.T, certs []*ctx509.Certificate) {
+	t.Helper()
+	for _, c := range certs {
+		require.NotEmpty(t, c.Signature)
+	}
 }
