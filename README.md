@@ -99,4 +99,12 @@ This folder contains two folders, one for updater and one for responder. The upd
 
 domain materials: Bytes which contain all the certificates which are related to this domain name.
 
-This test is the integration test for mapserver. The test first starts an updater, fetches 1000 certificates from CT log, and adds them to the SMT and domain entries tables. Then the test starts a responder, re-collects the previously-added certificates, and queries the proof for corresponding domain name. Then the proof is checked against individual certificate(whether the certificate is included in the domain materials, and whether SMT proof is correct). 
+This test is the integration test for mapserver. The test first starts an updater, fetches 1000 certificates from CT log, and adds them to the SMT and domain entries tables. Then the test starts a responder, re-collects the previously-added certificates, and queries the proof for corresponding domain name. Then the proof is checked against individual certificate(whether the certificate is included in the domain materials, and whether SMT proof is correct).
+
+
+## CT Log Servers
+
+[CT Community Site](https://github.com/google/certificate-transparency-community-site/blob/master/docs/google/known-logs.md)
+[Schema of JSON objects](https://www.gstatic.com/ct/log_list/v3/log_list_schema.json)
+
+[Chrome Certificate Transparency Policy](https://googlechrome.github.io/CertificateTransparency/ct_policy.html)

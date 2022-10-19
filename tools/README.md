@@ -1,4 +1,4 @@
-# Develpment tools
+# Development tools
 
 
 ## Installing the database
@@ -15,6 +15,13 @@ To allow root without password:
 - enter `FLUSH PRIVILEGES;`
 - you should see "mysql_native_password" as plugin for root when displaying the root user:
   `SELECT user,authentication_string,plugin,host FROM mysql.user;`
+
+
+## Move the data to another place
+Follow
+[https://www.digitalocean.com/community/tutorials/how-to-move-a-mysql-data-directory-to-a-new-location-on-ubuntu-18-04](https://www.digitalocean.com/community/tutorials/how-to-move-a-mysql-data-directory-to-a-new-location-on-ubuntu-18-04)
+especially the part for apparmor. The rest is not necessary if we create a symbolic link.
+Watch out for permissions and always copy with `cp -arp`.
 
 
 ## Analyze performance
