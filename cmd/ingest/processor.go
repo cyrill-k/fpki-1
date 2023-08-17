@@ -16,8 +16,9 @@ import (
 )
 
 type Processor struct {
-	BatchSize int
-	Conn      db.Conn
+	CurrentTime time.Time
+	BatchSize   int
+	Conn        db.Conn
 
 	incomingFileCh chan File      // indicates new file(s) with certificates to be ingested
 	fromParserCh   chan *CertData // parser data to be sent to SMT and DB\
@@ -37,10 +38,11 @@ type CertData struct {
 	CertChain []*ctx509.Certificate
 }
 
-func NewProcessor(conn db.Conn) *Processor {
+func NewProcessor(conn db.Conn, currentTime time.Time) *Processor {
 	p := &Processor{
-		BatchSize: 1000,
-		Conn:      conn,
+		CurrentTime: currentTime,
+		BatchSize:   1000,
+		Conn:        conn,
 
 		incomingFileCh: make(chan File),
 		fromParserCh:   make(chan *CertData),
@@ -168,7 +170,7 @@ func (p *Processor) ingestWithCSV(fileReader io.Reader) error {
 		}
 
 		// If the certificate is already expired, skip it altogether.
-		if time.Now().After(cert.NotAfter) {
+		if p.CurrentTime.After(cert.NotAfter) {
 			p.expiredCerts.Add(1)
 			continue
 		}

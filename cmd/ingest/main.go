@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/netsec-ethz/fpki/pkg/db"
 )
@@ -40,7 +41,9 @@ func main() {
 	exitIfError(conn.DisableIndexing("updates"))
 
 	// Update certificates and chains.
-	proc := NewProcessor(conn)
+	currentTime, err := time.Parse(time.RFC3339, "2023-02-01T00:00:00Z")
+	exitIfError(err)
+	proc := NewProcessor(conn, currentTime)
 	proc.AddGzFiles(gzFiles)
 	proc.AddCsvFiles(csvFiles)
 	exitIfError(proc.Wait())
